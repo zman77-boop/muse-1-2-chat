@@ -362,12 +362,19 @@
         <label for="modelName">Model</label>
         <input id="modelName" type="text" value="muse-spark-1.2">
       </div>
+      <div class="field">
+        <label for="firecrawlKey">Firecrawl API Key (for browsing + market data)</label>
+        <input id="firecrawlKey" type="password" placeholder="fc-...">
+      </div>
+      <div class="notice" style="background:#F5E6FF; border-color:#C9A8D8">
+        <strong>Firecrawl</strong> will be used for all browsing & live market data when <em>Web browsing</em> is toggled on. Get key at <a href="https://www.firecrawl.dev" target="_blank">firecrawl.dev</a> → Dashboard → API Keys.
+      </div>
       <div class="row">
         <button class="btn primary" id="saveSettings">Save</button>
         <button class="btn" id="testBtn">Test connection</button>
       </div>
       <div class="kicker" id="settingsStatus"></div>
-      <div class="kicker">Images / Web / GitHub toggles add instructions for the model. Full browsing, image generation, and GitHub actions need a backend proxy — toggles will include a system prompt for now.</div>
+      <div class="kicker">Web browsing toggle now uses <strong>Firecrawl</strong> for real browsing & market data (requires Firecrawl key above). Images/GitHub toggles still add prompt instructions.</div>
     </div>
   </div>
 </div>
@@ -408,15 +415,17 @@ function loadSettings(){
     return {
       apiKey: s?.apiKey || '',
       apiUrl: s?.apiUrl || 'https://api.meta.ai/v1/responses',
-      model: s?.model || 'muse-spark-1.2'
+      model: s?.model || 'muse-spark-1.2',
+      firecrawlKey: s?.firecrawlKey || ''
     };
-  }catch{ return {apiKey:'', apiUrl:'https://api.meta.ai/v1/responses', model:'muse-spark-1.2'} }
+  }catch{ return {apiKey:'', apiUrl:'https://api.meta.ai/v1/responses', model:'muse-spark-1.2', firecrawlKey:''} }
 }
 function saveSettings(){
   localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
   $('#apiKey').value = settings.apiKey;
   $('#apiUrl').value = settings.apiUrl;
   $('#modelName').value = settings.model;
+  $('#firecrawlKey').value = settings.firecrawlKey || '';
 }
 function loadChats(){
   try{
@@ -607,7 +616,8 @@ async function doSend(){
     return;
   }
   const chat = ensureChat();
-  const enriched = buildInputPayload(raw);
+  let enriched = buildInputPayload(raw);
+  if(firecrawlCtx) enriched += firecrawlCtx;
   chat.messages.push({role:'user', text: raw});
   if(chat.title==='New chat'){
     chat.title = raw.slice(0, 42) + (raw.length>42?'…':'');
@@ -618,6 +628,18 @@ async function doSend(){
   persistChats(); renderAll();
   sending=true; updateSendState();
   messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  // Firecrawl browsing (if Web toggle on) — fetch before building history
+  let firecrawlCtx = '';
+  const isWebOn = $('#toggleWeb')?.checked || $('#toggleWebM')?.checked;
+  if(isWebOn){
+    try{
+      chat.messages[chat.messages.length-1].meta = 'Browsing with Firecrawl…';
+      renderAll();
+      firecrawlCtx = await getFirecrawlContext(raw);
+      chat.messages[chat.messages.length-1].meta = 'Thinking…';
+    }catch(e){ firecrawlCtx = '\n\n[Firecrawl error: '+e.message+']'; }
+  }
 
   // Build history for API - only last 12 turns + current
   // Assistant messages must use output_text, user messages use input_text
@@ -676,6 +698,7 @@ $('#saveSettings').addEventListener('click', ()=>{
   settings.apiKey = $('#apiKey').value.trim();
   settings.apiUrl = $('#apiUrl').value.trim() || 'https://api.meta.ai/v1/responses';
   settings.model = $('#modelName').value.trim() || 'muse-spark-1.2';
+  settings.firecrawlKey = $('#firecrawlKey').value.trim();
   localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
   $('#settingsStatus').textContent='Saved ✓';
   setTimeout(closeModal, 600);
@@ -684,6 +707,7 @@ $('#testBtn').addEventListener('click', async ()=>{
   settings.apiKey = $('#apiKey').value.trim();
   settings.apiUrl = $('#apiUrl').value.trim();
   settings.model = $('#modelName').value.trim();
+  settings.firecrawlKey = $('#firecrawlKey').value.trim();
   $('#settingsStatus').textContent='Testing…';
   try{
     const res = await fetch(settings.apiUrl, {
@@ -795,6 +819,58 @@ function renderAttachmentChips(){
     const x=document.createElement('button'); x.textContent='✕'; x.onclick=()=>{ attachedFiles.splice(i,1); renderAttachmentChips(); };
     chip.appendChild(x); c.appendChild(chip);
   });
+}
+async function firecrawlSearch(query){
+  if(!settings.firecrawlKey) return null;
+  try{
+    const r = await fetch('https://api.firecrawl.dev/v1/search', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+settings.firecrawlKey, 'Content-Type':'application/json'},
+      body: JSON.stringify({query, limit:5, scrapeOptions:{formats:['markdown']}})
+    });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||JSON.stringify(j).slice(0,300));
+    return j.data || j.results || [];
+  }catch(e){ console.warn('Firecrawl search failed', e); return null; }
+}
+async function firecrawlScrape(url){
+  if(!settings.firecrawlKey) return null;
+  try{
+    const r = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+settings.firecrawlKey, 'Content-Type':'application/json'},
+      body: JSON.stringify({url, formats:['markdown'], onlyMainContent:true})
+    });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||JSON.stringify(j).slice(0,300));
+    return j.data?.markdown || j.markdown || j.data?.content || '';
+  }catch(e){ console.warn('Firecrawl scrape failed', e); return null; }
+}
+async function getFirecrawlContext(query){
+  const isWeb = $('#toggleWeb')?.checked || $('#toggleWebM')?.checked;
+  if(!isWeb) return '';
+  if(!settings.firecrawlKey) return '\n\n[Web browsing requested but no Firecrawl API key set — add it in ⚙︎ API settings]';
+  // Detect URL in query
+  const urlMatch = query.match(/https?:\/\/[^\s]+/);
+  if(urlMatch){
+    const md = await firecrawlScrape(urlMatch[0]);
+    if(md) return '\n\n[Firecrawl — scraped '+urlMatch[0]+']\n' + md.slice(0,8000);
+    return '';
+  }
+  // Check for market data keywords to tailor search
+  const isMarket = /\b(stock|market|nasdaq|sp500|s&p|dow|price|ticker|eth|btc|crypto|earnings|fed|inflation)\b/i.test(query);
+  const searchQuery = isMarket ? query + ' live market data' : query;
+  const results = await firecrawlSearch(searchQuery);
+  if(!results || results.length===0) return '\n\n[Firecrawl — no results for: '+query+']';
+  let ctx = '\n\n[Firecrawl — live browsing results for: '+query+']\n';
+  for(let i=0;i<Math.min(3, results.length); i++){
+    const r = results[i];
+    const title = r.title || r.url || 'Result';
+    const url = r.url || '';
+    const md = r.markdown || r.content || r.description || '';
+    ctx += `\n--- ${title} — ${url} ---\n${md.slice(0,2500)}\n`;
+  }
+  return ctx;
 }
 function getRAGContext(query){
   const pr=getActiveProject(); if(!pr || pr.files.length===0) return '';
