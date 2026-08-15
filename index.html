@@ -175,6 +175,19 @@
   }
   .send:disabled{opacity:.4; cursor:not-allowed}
   .fine{font-size:11px; color:var(--muted); text-align:center; margin-top:8px}
+  .projects{padding:12px; border-bottom:1px solid var(--line); display:grid; gap:8px; background:#fffdfb}
+  .projects h2{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0}
+  .project-select{width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:13px}
+  .project-files{display:grid; gap:6px; max-height:160px; overflow:auto}
+  .file-item{display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:12px}
+  .file-item .name{flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600}
+  .file-item .meta{color:var(--muted); font-size:11px}
+  .file-item button{border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; cursor:pointer; font-size:11px}
+  .attachments{display:flex; gap:6px; flex-wrap:wrap; padding:6px 0}
+  .attachment-chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #E8B4A6; background:var(--accent); color:var(--fig-ink); border-radius:999px; font-size:12px; font-weight:600}
+  .attachment-chip button{border:0; background:transparent; cursor:pointer; font-size:13px; line-height:1}
+  .drop-active{outline:2px dashed #E8B4A6; outline-offset:-6px; background:#FFF4F0}
+
   .overlay{
     position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; z-index:20;
   }
@@ -234,6 +247,17 @@
       <button class="btn primary" id="newChatBtn">+ New chat</button>
       <button class="btn" id="settingsBtn">⚙︎ API settings</button>
     </div>
+    <div class="projects" id="projectsSection">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <h2>Projects — RAG</h2>
+        <button class="btn small" id="newProjectBtn" title="New project">+ New</button>
+      </div>
+      <select id="projectSelect" class="project-select"></select>
+      <div class="project-files" id="projectFiles"></div>
+      <label class="btn small" style="cursor:pointer; justify-content:center" for="projectFileInput">+ Add files from desktop</label>
+      <input type="file" id="projectFileInput" multiple hidden>
+      <div class="hint" style="padding:0">Files stay on this device (localStorage). They’ll be used for RAG on every chat in this project.</div>
+    </div>
     <div class="history" id="historyList">
       <h2>History</h2>
       <div id="historyItems"></div>
@@ -272,8 +296,11 @@
           <label class="chip"><input type="checkbox" id="toggleWebM"> Web browsing</label>
           <label class="chip"><input type="checkbox" id="toggleGithubM"> GitHub</label>
         </div>
-        <div class="composer">
-          <textarea id="input" rows="1" placeholder="Ask anything… (Shift+Enter for new line)"></textarea>
+        <div id="attachmentChips" class="attachments"></div>
+        <div class="composer" id="composerBox">
+          <button class="icon-btn" id="attachBtn" aria-label="Add attachments" title="Attach files for this message">📎</button>
+          <input type="file" id="attachInput" multiple hidden>
+          <textarea id="input" rows="1" placeholder="Ask anything… (Shift+Enter for new line) — drag files here"></textarea>
           <button class="send" id="sendBtn" aria-label="Send">↑</button>
         </div>
         <div class="fine">Muse can make mistakes. API key never leaves your device except to api.meta.ai. <a href="#" id="openSettingsLink">Set API key</a></div>
@@ -293,6 +320,16 @@
     <button class="btn primary" id="newChatBtnM">+ New chat</button>
     <button class="btn" id="settingsBtnM">⚙︎ API settings</button>
   </div>
+  <div class="projects" id="projectsSectionM" style="padding:12px; border-bottom:1px solid var(--line); display:grid; gap:8px">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <h2 style="font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0">Projects — RAG</h2>
+        <button class="btn small" id="newProjectBtnM">+ New</button>
+      </div>
+      <select id="projectSelectM" class="project-select"></select>
+      <div class="project-files" id="projectFilesM"></div>
+      <label class="btn small" style="cursor:pointer; justify-content:center" for="projectFileInputM">+ Add files</label>
+      <input type="file" id="projectFileInputM" multiple hidden>
+    </div>
   <div class="history" id="historyListM"><div id="historyItemsM"></div></div>
   <div class="sidebar-foot">
     <div class="row">
@@ -688,6 +725,153 @@ saveSettings();
 if(!chats.length) newChat();
 else if(!currentId) currentId=chats[0].id;
 renderAll();
+
+// === Projects + Attachments + RAG ===
+const LS_PROJECTS = 'zack_projects_v1';
+const LS_ACTIVE_PROJECT = 'zack_active_project_v1';
+let projects = loadProjects();
+let activeProjectId = localStorage.getItem(LS_ACTIVE_PROJECT) || (projects[0]?.id || null);
+let attachedFiles = []; // for current message only: [{name, size, text, type}]
+
+function loadProjects(){
+  try{ const v=JSON.parse(localStorage.getItem(LS_PROJECTS)||'[]'); return Array.isArray(v)?v:[]; }catch{return []}
+}
+function saveProjects(){
+  localStorage.setItem(LS_PROJECTS, JSON.stringify(projects));
+  if(activeProjectId) localStorage.setItem(LS_ACTIVE_PROJECT, activeProjectId);
+}
+function ensureProject(){
+  if(projects.length===0){
+    const id='p_'+Date.now().toString(36);
+    projects=[{id, name:'Default Project', created:Date.now(), files:[]}];
+    activeProjectId=id;
+    saveProjects();
+  }
+  if(!projects.find(x=>x.id===activeProjectId)) activeProjectId=projects[0].id;
+}
+function getActiveProject(){ ensureProject(); return projects.find(x=>x.id===activeProjectId); }
+function renderProjects(){
+  ensureProject();
+  const sel=$('#projectSelect'), selM=$('#projectSelectM');
+  [sel, selM].forEach(s=>{ if(!s) return; s.innerHTML=''; projects.forEach(pr=>{ const o=document.createElement('option'); o.value=pr.id; o.textContent=pr.name + ' ('+pr.files.length+')'; if(pr.id===activeProjectId) o.selected=true; s.appendChild(o); }); });
+  const list=$('#projectFiles'), listM=$('#projectFilesM');
+  [list, listM].forEach(l=>{
+    if(!l) return; l.innerHTML='';
+    const pr=getActiveProject();
+    if(pr.files.length===0){ const d=document.createElement('div'); d.className='hint'; d.style.padding='4px'; d.textContent='No files yet — add PDFs, txt, md from desktop. They stay on this device.'; l.appendChild(d); return; }
+    pr.files.forEach(f=>{
+      const row=document.createElement('div'); row.className='file-item';
+      const icon = f.type.includes('image')?'🖼️': f.name.endsWith('.pdf')?'📄':'📎';
+      row.innerHTML=`<span>${icon}</span><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="meta">${(f.size/1024).toFixed(1)}KB</span>`;
+      const del=document.createElement('button'); del.textContent='✕'; del.title='Remove'; del.onclick=()=>{ pr.files=pr.files.filter(x=>x.id!==f.id); saveProjects(); renderProjects(); };
+      row.appendChild(del); l.appendChild(row);
+    });
+  });
+}
+function addFilesToProject(fileList){
+  const pr=getActiveProject();
+  const files=Array.from(fileList);
+  const readers = files.map(file=> new Promise(res=>{
+    const r=new FileReader();
+    r.onload=()=>{
+      const text = typeof r.result==='string' ? r.result.slice(0, 20000) : '';
+      // store text snippet for RAG; for images store placeholder
+      const isText = file.type.startsWith('text/') || /\.(txt|md|json|csv|js|py|html|css)$/i.test(file.name);
+      pr.files.push({id:'f_'+Date.now().toString(36)+Math.random().toString(36).slice(2,4), name:file.name, size:file.size, type:file.type||'text/plain', text: isText ? text : `[Binary ${file.type||'file'}: ${file.name} — content not extractable client-side, but will be noted in prompt]`});
+      res();
+    };
+    r.onerror=()=>res();
+    if(file.type.startsWith('text/') || /\.(txt|md|json|csv|js|py|html|css|log)$/i.test(file.name)) r.readAsText(file);
+    else if(file.type.startsWith('image/')) r.readAsDataURL(file);
+    else r.readAsText(file);
+  }));
+  Promise.all(readers).then(()=>{ saveProjects(); renderProjects(); });
+}
+function renderAttachmentChips(){
+  const c=$('#attachmentChips'); if(!c) return; c.innerHTML='';
+  attachedFiles.forEach((f,i)=>{
+    const chip=document.createElement('div'); chip.className='attachment-chip';
+    chip.innerHTML=`<span>📎 ${esc(f.name)} ${(f.size/1024).toFixed(1)}KB</span>`;
+    const x=document.createElement('button'); x.textContent='✕'; x.onclick=()=>{ attachedFiles.splice(i,1); renderAttachmentChips(); };
+    chip.appendChild(x); c.appendChild(chip);
+  });
+}
+function getRAGContext(query){
+  const pr=getActiveProject(); if(!pr || pr.files.length===0) return '';
+  const q=(query||'').toLowerCase().split(/\s+/).filter(w=>w.length>3);
+  const scored = pr.files.map(f=>{
+    const txt=(f.text||'').toLowerCase();
+    let score=0; q.forEach(w=>{ if(txt.includes(w)) score+=1; });
+    // fallback: if no keyword match, include first file snippet lightly
+    return {f, score, snippet: (f.text||'').slice(0, 1200)};
+  }).sort((a,b)=>b.score-a.score).filter(x=>x.score>0 || x.snippet).slice(0,3);
+  if(scored.length===0) return '';
+  return '\n\n[Project: '+pr.name+' — relevant files for RAG]\n' + scored.map(s=>`--- ${s.f.name} ---\n${s.snippet.slice(0,1000)}`).join('\n\n');
+}
+
+// Wire up
+ensureProject(); renderProjects();
+$('#projectSelect')?.addEventListener('change', e=>{ activeProjectId=e.target.value; saveProjects(); renderProjects(); });
+$('#projectSelectM')?.addEventListener('change', e=>{ activeProjectId=e.target.value; saveProjects(); renderProjects(); $('#projectSelect').value=activeProjectId; });
+$('#newProjectBtn')?.addEventListener('click', ()=>{ const name=prompt('Project name?'); if(!name) return; const id='p_'+Date.now().toString(36); projects.push({id, name:name.trim(), created:Date.now(), files:[]}); activeProjectId=id; saveProjects(); renderProjects(); });
+$('#newProjectBtnM')?.addEventListener('click', ()=>{ const name=prompt('Project name?'); if(!name) return; const id='p_'+Date.now().toString(36); projects.push({id, name:name.trim(), created:Date.now(), files:[]}); activeProjectId=id; saveProjects(); renderProjects(); });
+$('#projectFileInput')?.addEventListener('change', e=>{ if(e.target.files.length) addFilesToProject(e.target.files); e.target.value=''; });
+$('#projectFileInputM')?.addEventListener('change', e=>{ if(e.target.files.length) addFilesToProject(e.target.files); e.target.value=''; });
+$('#attachBtn')?.addEventListener('click', ()=> $('#attachInput').click());
+$('#attachInput')?.addEventListener('change', e=>{
+  const files=Array.from(e.target.files||[]);
+  files.forEach(file=>{
+    const r=new FileReader();
+    r.onload=()=>{ attachedFiles.push({name:file.name, size:file.size, type:file.type, text: typeof r.result==='string' ? r.result.slice(0,8000) : ''}); renderAttachmentChips(); };
+    if(file.type.startsWith('text/') || /\.(txt|md|json|csv|js|py)$/i.test(file.name)) r.readAsText(file);
+    else r.readAsText(file);
+  });
+  e.target.value='';
+});
+// Drag & drop
+['dragenter','dragover'].forEach(ev=>{
+  $('#composerBox')?.addEventListener(ev, e=>{ e.preventDefault(); e.currentTarget.classList.add('drop-active'); });
+  $('#projectsSection')?.addEventListener(ev, e=>{ e.preventDefault(); e.currentTarget.classList.add('drop-active'); });
+});
+['dragleave','drop'].forEach(ev=>{
+  $('#composerBox')?.addEventListener(ev, e=>{ e.currentTarget.classList.remove('drop-active'); });
+  $('#projectsSection')?.addEventListener(ev, e=>{ e.currentTarget.classList.remove('drop-active'); });
+});
+$('#composerBox')?.addEventListener('drop', e=>{
+  e.preventDefault();
+  const dt=e.dataTransfer; if(!dt||!dt.files.length) return;
+  // if files are dropped on composer -> attach to message
+  Array.from(dt.files).forEach(file=>{
+    const r=new FileReader();
+    r.onload=()=>{ attachedFiles.push({name:file.name, size:file.size, type:file.type, text: typeof r.result==='string' ? r.result.slice(0,8000) : ''}); renderAttachmentChips(); };
+    r.readAsText(file);
+  });
+});
+$('#projectsSection')?.addEventListener('drop', e=>{
+  e.preventDefault();
+  const dt=e.dataTransfer; if(dt&&dt.files.length) addFilesToProject(dt.files);
+});
+
+// Hook RAG + attachments into send
+const _origBuildInputPayload = buildInputPayload;
+buildInputPayload = function(userText){
+  let base = _origBuildInputPayload(userText);
+  // Append RAG context from project
+  const rag = getRAGContext(userText);
+  if(rag) base += rag;
+  // Append attached files for this message
+  if(attachedFiles.length){
+    base += '\n\n[Attachments for this message]\n' + attachedFiles.map(f=>`--- ${f.name} (${(f.size/1024).toFixed(1)}KB) ---\n${(f.text||'[binary]').slice(0,4000)}`).join('\n\n');
+  }
+  return base;
+};
+// Clear attachments after send
+const _origDoSend = doSend;
+doSend = async function(){
+  const res = await _origDoSend();
+  attachedFiles = []; renderAttachmentChips();
+  return res;
+};
 
 // Register minimal service worker for PWA installability (data URL)
 if('serviceWorker' in navigator){
