@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#111111">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="description" content="Muse Spark 1.2 - Chat for mobile & desktop">
-<title>Muse 1.2 — Chat</title>
-<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiTXVzZSAxLjIgQ2hhdCIsInNob3J0X25hbWUiOiJNdXNlIDEuMiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiNmOGY4ZjciLCJ0aGVtZV9jb2xvciI6IiMxMTExMTEiLCJpY29ucyI6W119">
+<meta name="description" content="Zack AI - Powered by Muse Spark 1.2">
+<title>Zack AI — Powered by Muse 1.2</title>
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiWmFjayBBSSIsInNob3J0X25hbWUiOiJaYWNrIEFJIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiI2Y4ZjhmNyIsInRoZW1lX2NvbG9yIjoiIzExMTExMSIsImljb25zIjpbXX0=">
 <style>
   :root{
     --bg:#f8f8f7;
@@ -223,10 +223,10 @@
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
-      <div class="logo">M</div>
+      <div class="logo">Z</div>
       <div>
-        <h1>Muse 1.2 Chat</h1>
-        <p>muse-spark-1.2 • mobile & desktop</p>
+        <h1>Zack AI</h1>
+        <p>Powered by muse-spark-1.2 • Zack Alexander</p>
       </div>
     </div>
     <div class="sidebar-actions">
@@ -250,7 +250,7 @@
     <div class="topbar">
       <div class="topbar-left">
         <button class="icon-btn menu" id="menuBtn" aria-label="Menu">≡</button>
-        <div class="model-badge"><span class="dot"></span> muse-spark-1.2 <span style="color:var(--muted); font-weight:500">• regular</span></div>
+        <div class="model-badge"><span class="dot"></span> Zack AI <span style="color:var(--muted); font-weight:500">• regular</span></div>
         <div class="capabilities" id="capsDesktop">
           <label class="chip"><input type="checkbox" id="toggleImages"> Images</label>
           <label class="chip"><input type="checkbox" id="toggleWeb"> Web browsing</label>
@@ -285,8 +285,8 @@
 <div class="overlay" id="overlay"></div>
 <div class="drawer" id="drawer">
   <div class="brand">
-    <div class="logo">M</div>
-    <div><h1>Muse 1.2 Chat</h1><p>muse-spark-1.2</p></div>
+    <div class="logo">Z</div>
+    <div><h1>Zack AI</h1><p>Powered by muse-spark-1.2</p></div>
   </div>
   <div class="sidebar-actions">
     <button class="btn primary" id="newChatBtnM">+ New chat</button>
@@ -460,7 +460,7 @@ function renderMessages(){
     empty.className='empty';
     empty.innerHTML=`
       <h2>What's on your mind?</h2>
-      <p>Chat with <strong>muse-spark-1.2 regular</strong> from your phone or desktop. Your history stays on this device. Use the toggles for Images, Web browsing, and GitHub — they add smart instructions to the model.</p>
+      <p>Chat with <strong>Zack AI</strong> <span style="color:var(--muted)">— Muse Spark 1.2 inside</span> from your phone or desktop. Your history stays on this device. Use the toggles for Images, Web browsing, and GitHub — they add smart instructions to the model.</p>
       <div class="suggestions">
         <button class="suggestion" data-prompt="Write a script that randomly generates a haiku about Meta, and explain your reasoning behind what script language you would choose."><strong>Haiku script</strong>Generate a random haiku about Meta + explain language choice</button>
         <button class="suggestion" data-prompt="Create an image of a minimal poster for Muse 1.2 launch — describe the prompt you'd use for an image model."><strong>Image idea</strong>Draft an image prompt for a launch poster</button>
