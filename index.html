@@ -582,10 +582,15 @@ async function doSend(){
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
   // Build history for API - only last 12 turns + current
-  const historyForApi = chat.messages.filter(m=>m.text!=='…').slice(-12).map(m=>({
-    role: m.role,
-    content: [{type:'input_text', text: m.role==='user' ? (m===chat.messages[chat.messages.length-2] ? enriched : m.text) : m.text}]
-  }));
+  // Assistant messages must use output_text, user messages use input_text
+  const historyForApi = chat.messages.filter(m=>m.text!=='…').slice(-12).map(m=>{
+    const isUser = m.role==='user';
+    const txt = isUser ? (m===chat.messages[chat.messages.length-2] ? enriched : m.text) : m.text;
+    return {
+      role: m.role,
+      content: [{type: isUser ? 'input_text' : 'output_text', text: txt}]
+    };
+  });
   // But per your curl, API expects "input" array with role/content. Use last user enriched, previous as is.
   // Simpler: send full history as input (works for responses API)
   const body = {
