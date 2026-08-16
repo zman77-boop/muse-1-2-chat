@@ -629,16 +629,26 @@ async function doSend(){
   sending=true; updateSendState();
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
-  // Firecrawl browsing (if Web toggle on) — fetch before building history
+  // Firecrawl browsing (if Web toggle on) — fail-open, never block send
   let firecrawlCtx = '';
   const isWebOn = $('#toggleWeb')?.checked || $('#toggleWebM')?.checked;
   if(isWebOn){
-    try{
-      chat.messages[chat.messages.length-1].meta = 'Browsing with Firecrawl…';
-      renderAll();
-      firecrawlCtx = await getFirecrawlContext(raw);
-      chat.messages[chat.messages.length-1].meta = 'Thinking…';
-    }catch(e){ firecrawlCtx = '\n\n[Firecrawl error: '+e.message+']'; }
+    if(!settings.firecrawlKey){
+      // No key -> skip browsing, still send to Muse
+      firecrawlCtx = '';
+    } else {
+      try{
+        chat.messages[chat.messages.length-1].meta = 'Browsing with Firecrawl…';
+        renderAll();
+        // Race with 4.5s timeout to never hang send
+        const withTimeout = Promise.race([
+          getFirecrawlContext(raw),
+          new Promise(res => setTimeout(()=>res(''), 4500))
+        ]);
+        firecrawlCtx = await withTimeout || '';
+        chat.messages[chat.messages.length-1].meta = 'Thinking…';
+      }catch(e){ console.warn(e); firecrawlCtx = ''; chat.messages[chat.messages.length-1].meta = 'Thinking…'; }
+    }
   }
 
   // Build history for API - only last 12 turns + current
@@ -822,29 +832,35 @@ function renderAttachmentChips(){
 }
 async function firecrawlSearch(query){
   if(!settings.firecrawlKey) return null;
+  const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), 4000);
   try{
     const r = await fetch('https://api.firecrawl.dev/v1/search', {
       method:'POST',
       headers:{'Authorization':'Bearer '+settings.firecrawlKey, 'Content-Type':'application/json'},
-      body: JSON.stringify({query, limit:5, scrapeOptions:{formats:['markdown']}})
+      body: JSON.stringify({query, limit:5, scrapeOptions:{formats:['markdown']}}),
+      signal: ctrl.signal
     });
+    clearTimeout(to);
     const j = await r.json();
     if(!r.ok) throw new Error(j.error||JSON.stringify(j).slice(0,300));
     return j.data || j.results || [];
-  }catch(e){ console.warn('Firecrawl search failed', e); return null; }
+  }catch(e){ clearTimeout(to); console.warn('Firecrawl search failed', e); return null; }
 }
 async function firecrawlScrape(url){
   if(!settings.firecrawlKey) return null;
+  const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), 4000);
   try{
     const r = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method:'POST',
       headers:{'Authorization':'Bearer '+settings.firecrawlKey, 'Content-Type':'application/json'},
-      body: JSON.stringify({url, formats:['markdown'], onlyMainContent:true})
+      body: JSON.stringify({url, formats:['markdown'], onlyMainContent:true}),
+      signal: ctrl.signal
     });
+    clearTimeout(to);
     const j = await r.json();
     if(!r.ok) throw new Error(j.error||JSON.stringify(j).slice(0,300));
     return j.data?.markdown || j.markdown || j.data?.content || '';
-  }catch(e){ console.warn('Firecrawl scrape failed', e); return null; }
+  }catch(e){ clearTimeout(to); console.warn('Firecrawl scrape failed', e); return null; }
 }
 async function getFirecrawlContext(query){
   const isWeb = $('#toggleWeb')?.checked || $('#toggleWebM')?.checked;
