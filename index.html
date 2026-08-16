@@ -616,12 +616,10 @@ async function doSend(){
     return;
   }
   const chat = ensureChat();
-  let enriched = buildInputPayload(raw);
-  if(firecrawlCtx) enriched += firecrawlCtx;
-  chat.messages.push({role:'user', text: raw});
   if(chat.title==='New chat'){
     chat.title = raw.slice(0, 42) + (raw.length>42?'…':'');
   }
+  chat.messages.push({role:'user', text: raw});
   inputEl.value=''; autoResize(); updateSendState();
   // optimistic render + pending assistant
   chat.messages.push({role:'assistant', text:'…', meta:'Thinking…'});
@@ -650,6 +648,10 @@ async function doSend(){
       }catch(e){ console.warn(e); firecrawlCtx = ''; chat.messages[chat.messages.length-1].meta = 'Thinking…'; }
     }
   }
+
+  // Build enriched payload AFTER Firecrawl (so RAG + Firecrawl + attachments are included)
+  let enriched = buildInputPayload(raw);
+  if(firecrawlCtx) enriched += firecrawlCtx;
 
   // Build history for API - only last 12 turns + current
   // Assistant messages must use output_text, user messages use input_text
@@ -690,7 +692,8 @@ async function doSend(){
     const corsHint = msg.includes('Failed to fetch') ? '\n\nTip: If you opened this file via file://, CORS will fail. Run:  python3 -m http.server 8000  inside the folder, then open http://localhost:8000  — or deploy to any static host.' : '';
     chat.messages[chat.messages.length-1] = {role:'assistant', text:'Request failed:\n\n```\n' + msg + corsHint + '\n```', meta:'error'};
   }finally{
-    sending=false; persistChats(); renderAll();
+    sending=false; attachedFiles = []; try{renderAttachmentChips();}catch(e){}
+    persistChats(); renderAll();
   }
 }
 
@@ -958,12 +961,7 @@ buildInputPayload = function(userText){
   return base;
 };
 // Clear attachments after send
-const _origDoSend = doSend;
-doSend = async function(){
-  const res = await _origDoSend();
-  attachedFiles = []; renderAttachmentChips();
-  return res;
-};
+// wrapper removed - handled in finally
 
 // Register minimal service worker for PWA installability (data URL)
 if('serviceWorker' in navigator){
