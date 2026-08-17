@@ -366,6 +366,20 @@
         <label for="firecrawlKey">Firecrawl API Key (for browsing + market data)</label>
         <input id="firecrawlKey" type="password" placeholder="fc-...">
       </div>
+      <div class="field">
+        <label for="systemPrompt">System Prompt — Zack AI personality</label>
+        <textarea id="systemPrompt" rows="3" placeholder="You are Zack AI — concise analyst for Zack..." style="width:100%; padding:10px; border:1px solid var(--line); border-radius:12px; background:#fbfbfb; resize:vertical"></textarea>
+        <div class="kicker">Sent with every message as system. Keep it concise.</div>
+      </div>
+      <div class="field">
+        <label>Memory — long-term facts (used via RAG)</label>
+        <div id="memoryList" style="display:grid; gap:6px; margin-bottom:6px"></div>
+        <div style="display:flex; gap:6px">
+          <input id="memoryInput" type="text" placeholder="Add memory — e.g. Use all resources comprehensively" style="flex:1; padding:9px 10px; border:1px solid var(--line); border-radius:10px; background:#fbfbfb">
+          <button class="btn small" id="addMemoryBtn" type="button">+ Add</button>
+        </div>
+        <label style="display:flex; gap:6px; align-items:center; margin-top:8px; font-size:12px"><input type="checkbox" id="useMemoryToggle" checked> Use memory in chats</label>
+      </div>
       <div class="notice" style="background:#F5E6FF; border-color:#C9A8D8">
         <strong>Firecrawl</strong> will be used for all browsing & live market data when <em>Web browsing</em> is toggled on. Get key at <a href="https://www.firecrawl.dev" target="_blank">firecrawl.dev</a> → Dashboard → API Keys.
       </div>
@@ -416,9 +430,16 @@ function loadSettings(){
       apiKey: s?.apiKey || '',
       apiUrl: s?.apiUrl || 'https://api.meta.ai/v1/responses',
       model: s?.model || 'muse-spark-1.2',
-      firecrawlKey: s?.firecrawlKey || ''
+      firecrawlKey: s?.firecrawlKey || '',
+      systemPrompt: s?.systemPrompt || 'You are Zack AI — concise analyst for Zack. Use all resources comprehensively: Projects RAG, attachments, and Firecrawl live browsing/market data when relevant. Be comprehensive, cover edge cases, but keep language clear and non-technical. Zack is not a dev — explain simply, no jargon, smooth and helpful.',
+      memory: Array.isArray(s?.memory) ? s.memory : [
+        'Use all available resources comprehensively — Projects, attachments, and Firecrawl browsing/market data — every answer should leverage what is available.',
+        'Be comprehensive: cover edge cases, alternatives, and next steps, but keep it concise and analyst-clear.',
+        'Zack is not a dev — explain without jargon, give plain steps and why it matters, keep performance smooth.'
+      ],
+      useMemory: s?.useMemory !== false
     };
-  }catch{ return {apiKey:'', apiUrl:'https://api.meta.ai/v1/responses', model:'muse-spark-1.2', firecrawlKey:''} }
+  }catch{ return {apiKey:'', apiUrl:'https://api.meta.ai/v1/responses', model:'muse-spark-1.2', firecrawlKey:'', systemPrompt:'You are Zack AI — concise analyst for Zack. Use all resources comprehensively: Projects RAG, attachments, and Firecrawl live browsing/market data when relevant. Be comprehensive, cover edge cases, but keep language clear and non-technical. Zack is not a dev — explain simply, no jargon, smooth and helpful.', memory:[], useMemory:true} }
 }
 function saveSettings(){
   localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
@@ -426,6 +447,9 @@ function saveSettings(){
   $('#apiUrl').value = settings.apiUrl;
   $('#modelName').value = settings.model;
   $('#firecrawlKey').value = settings.firecrawlKey || '';
+  $('#systemPrompt').value = settings.systemPrompt || '';
+  renderMemoryList();
+  $('#useMemoryToggle').checked = settings.useMemory !== false;
 }
 function loadChats(){
   try{
@@ -665,9 +689,26 @@ async function doSend(){
   });
   // But per your curl, API expects "input" array with role/content. Use last user enriched, previous as is.
   // Simpler: send full history as input (works for responses API)
+  // Inject system prompt + relevant memory as system message at start
+  let finalInput = historyForApi;
+  const sysParts = [];
+  if(settings.systemPrompt) sysParts.push(settings.systemPrompt);
+  if(settings.useMemory && settings.memory && settings.memory.length){
+    // Simple RAG for memory: pick memories matching query keywords
+    const q = raw.toLowerCase().split(/\s+/).filter(w=>w.length>3);
+    const scored = settings.memory.map(m=>{
+      const s = q.filter(w=> m.toLowerCase().includes(w)).length;
+      return {m, s};
+    }).sort((a,b)=>b.s-a.s).filter(x=>x.s>0).slice(0,3);
+    const mems = scored.length ? scored.map(x=>x.m) : settings.memory.slice(0,2);
+    if(mems.length) sysParts.push('[Memory for Zack]\n' + mems.map(m=>'- '+m).join('\n'));
+  }
+  if(sysParts.length){
+    finalInput = [{role:'system', content:[{type:'input_text', text: sysParts.join('\n\n')} ]}, ...historyForApi];
+  }
   const body = {
     model: settings.model,
-    input: historyForApi,
+    input: finalInput,
     stream: false
   };
 
@@ -712,15 +753,35 @@ $('#saveSettings').addEventListener('click', ()=>{
   settings.apiUrl = $('#apiUrl').value.trim() || 'https://api.meta.ai/v1/responses';
   settings.model = $('#modelName').value.trim() || 'muse-spark-1.2';
   settings.firecrawlKey = $('#firecrawlKey').value.trim();
+  settings.systemPrompt = $('#systemPrompt').value.trim();
+  settings.useMemory = $('#useMemoryToggle').checked;
   localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
   $('#settingsStatus').textContent='Saved ✓';
   setTimeout(closeModal, 600);
 });
+function renderMemoryList(){
+  const c=$('#memoryList'); if(!c) return; c.innerHTML='';
+  (settings.memory||[]).forEach((m,i)=>{
+    const row=document.createElement('div'); row.style.cssText='display:flex; gap:8px; align-items:center; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:12px';
+    const span=document.createElement('span'); span.textContent=m; span.style.flex='1'; span.style.whiteSpace='nowrap'; span.style.overflow='hidden'; span.style.textOverflow='ellipsis'; span.title=m;
+    const del=document.createElement('button'); del.textContent='✕'; del.style.cssText='border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; cursor:pointer'; del.onclick=()=>{ settings.memory.splice(i,1); localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); renderMemoryList(); };
+    row.appendChild(span); row.appendChild(del); c.appendChild(row);
+  });
+}
+$('#addMemoryBtn')?.addEventListener('click', ()=>{
+  const inp=$('#memoryInput'); const v=inp.value.trim(); if(!v) return;
+  settings.memory = settings.memory||[]; settings.memory.push(v); localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); inp.value=''; renderMemoryList();
+});
+$('#memoryInput')?.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#addMemoryBtn').click(); }});
+$('#useMemoryToggle')?.addEventListener('change', e=>{ settings.useMemory=e.target.checked; localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); });
+
 $('#testBtn').addEventListener('click', async ()=>{
   settings.apiKey = $('#apiKey').value.trim();
   settings.apiUrl = $('#apiUrl').value.trim();
   settings.model = $('#modelName').value.trim();
   settings.firecrawlKey = $('#firecrawlKey').value.trim();
+  settings.systemPrompt = $('#systemPrompt').value.trim();
+  settings.useMemory = $('#useMemoryToggle').checked;
   $('#settingsStatus').textContent='Testing…';
   try{
     const res = await fetch(settings.apiUrl, {
