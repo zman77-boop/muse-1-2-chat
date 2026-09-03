@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#E8D0F2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="description" content="Zack AI for Zack - Muse Spark 1.2">
-<title>Zack AI — for Zack • Muse 1.2</title>
+<title>Zack AI — for Zack • Muse 1.3</title>
 <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiWmFjayBBSSIsInNob3J0X25hbWUiOiJaYWNrIEFJIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiI2Y4ZjhmNyIsInRoZW1lX2NvbG9yIjoiIzExMTExMSIsImljb25zIjpbXX0=">
 <style>
   :root{
@@ -360,7 +360,7 @@
       </div>
       <div class="field">
         <label for="modelName">Model</label>
-        <input id="modelName" type="text" value="muse-spark-1.2">
+        <input id="modelName" type="text" value="muse-spark-1.3">
       </div>
       <div class="field">
         <label for="firecrawlKey">Firecrawl API Key (for browsing + market data)</label>
@@ -429,7 +429,7 @@ function loadSettings(){
     return {
       apiKey: s?.apiKey || '',
       apiUrl: s?.apiUrl || 'https://api.meta.ai/v1/responses',
-      model: s?.model || 'muse-spark-1.2',
+      model: s?.model || 'muse-spark-1.3',
       firecrawlKey: s?.firecrawlKey || '',
       systemPrompt: s?.systemPrompt || 'You are Zack AI — concise analyst for Zack. Use all resources comprehensively: Projects RAG, attachments, and Firecrawl live browsing/market data when relevant. Be comprehensive, cover edge cases, but keep language clear and non-technical. Zack is not a dev — explain simply, no jargon, smooth and helpful.',
       memory: Array.isArray(s?.memory) ? s.memory : [
@@ -439,7 +439,7 @@ function loadSettings(){
       ],
       useMemory: s?.useMemory !== false
     };
-  }catch{ return {apiKey:'', apiUrl:'https://api.meta.ai/v1/responses', model:'muse-spark-1.2', firecrawlKey:'', systemPrompt:'You are Zack AI — concise analyst for Zack. Use all resources comprehensively: Projects RAG, attachments, and Firecrawl live browsing/market data when relevant. Be comprehensive, cover edge cases, but keep language clear and non-technical. Zack is not a dev — explain simply, no jargon, smooth and helpful.', memory:[], useMemory:true} }
+  }catch{ return {apiKey:'', apiUrl:'https://api.meta.ai/v1/responses', model:'muse-spark-1.3', firecrawlKey:'', systemPrompt:'You are Zack AI — concise analyst for Zack. Use all resources comprehensively: Projects RAG, attachments, and Firecrawl live browsing/market data when relevant. Be comprehensive, cover edge cases, but keep language clear and non-technical. Zack is not a dev — explain simply, no jargon, smooth and helpful.', memory:[], useMemory:true} }
 }
 function saveSettings(){
   localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
@@ -534,7 +534,7 @@ function renderMessages(){
       <p>Chat with <strong>Zack AI</strong> <span style="color:var(--muted)">— Muse Spark 1.2 inside</span> from your phone or desktop. Your history stays on this device. Use the toggles for Images, Web browsing, and GitHub — they add smart instructions to the model.</p>
       <div class="suggestions">
         <button class="suggestion" data-prompt="Write a script that randomly generates a haiku about Meta, and explain your reasoning behind what script language you would choose."><strong>Haiku script</strong>Generate a random haiku about Meta + explain language choice</button>
-        <button class="suggestion" data-prompt="Create an image of a minimal poster for Muse 1.2 launch — describe the prompt you'd use for an image model."><strong>Image idea</strong>Draft an image prompt for a launch poster</button>
+        <button class="suggestion" data-prompt="Create an image of a minimal poster for Muse 1.3 launch — describe the prompt you'd use for an image model."><strong>Image idea</strong>Draft an image prompt for a launch poster</button>
         <button class="suggestion" data-prompt="Browse the web and summarize the latest news about Meta AI today. If you can't browse, explain what you'd search."><strong>Web browsing</strong>Summarize latest Meta AI news</button>
         <button class="suggestion" data-prompt="Connect to GitHub: outline how you'd create a repo, commit this chat UI, and open a PR. Show the git commands."><strong>GitHub</strong>Scaffold a repo &amp; PR workflow</button>
       </div>
@@ -751,7 +751,7 @@ modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
 $('#saveSettings').addEventListener('click', ()=>{
   settings.apiKey = $('#apiKey').value.trim();
   settings.apiUrl = $('#apiUrl').value.trim() || 'https://api.meta.ai/v1/responses';
-  settings.model = $('#modelName').value.trim() || 'muse-spark-1.2';
+  settings.model = $('#modelName').value.trim() || 'muse-spark-1.3';
   settings.firecrawlKey = $('#firecrawlKey').value.trim();
   settings.systemPrompt = $('#systemPrompt').value.trim();
   settings.useMemory = $('#useMemoryToggle').checked;
@@ -813,7 +813,7 @@ $('#clearBtn').addEventListener('click', clearAll);
 $('#clearBtnM').addEventListener('click', clearAll);
 function doExport(){
   const blob=new Blob([JSON.stringify({settings:{...settings, apiKey:'***'}, chats},null,2)],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='muse-1.2-chats.json'; a.click();
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='muse-1.3-chats.json'; a.click();
 }
 $('#exportBtn').addEventListener('click', doExport);
 $('#exportBtnM').addEventListener('click', doExport);
